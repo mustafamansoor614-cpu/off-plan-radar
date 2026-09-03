@@ -9,31 +9,58 @@
 // not document or version. It can change or get rate-limited without warning.
 // This is a personal research tool, not a product to resell or run at scale —
 // see the README for the full explanation.
-
+ 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-
+ 
+// A fuller, more browser-realistic header set. Meta's edge is more likely to
+// flag a request as automated when it's missing the client-hint / fetch-
+// metadata headers a real Chrome always sends, even with a normal User-Agent.
 const COMMON_HEADERS = {
   "User-Agent": UA,
-  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
   "Accept-Language": "en-US,en;q=0.9",
+  "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"Windows"',
+  "Upgrade-Insecure-Requests": "1",
 };
-
+ 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+ 
+// Retries a fetch a couple of times on 403/429/5xx — Meta's edge sometimes
+// throttles a single request but lets the next one through seconds later.
+// Only drains the body of an attempt we're about to discard — the body of
+// whichever response we ultimately return is left untouched for the caller.
+async function fetchWithRetry(url, options, attempts = 3) {
+  let lastRes = null;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await sleep(500 * i);
+    const res = await fetch(url, options);
+    if (res.status === 200) return res;
+    if (i < attempts - 1) await res.text().catch(() => {});
+    lastRes = res;
+  }
+  return lastRes;
+}
+ 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
-
+ 
 function json(statusCode, body) {
   return { statusCode, headers: { ...CORS, "Content-Type": "application/json" }, body: JSON.stringify(body) };
 }
-
+ 
 // --- cookie handling -------------------------------------------------------
 // Meta refuses fully anonymous requests to the Ad Library. A quick visit to
 // the homepage first earns the same guest cookies a real browser would pick
 // up, which is enough to view public library results.
-
+ 
 function extractSetCookies(res) {
   if (typeof res.headers.getSetCookie === "function") {
     const c = res.headers.getSetCookie();
@@ -42,23 +69,24 @@ function extractSetCookies(res) {
   const raw = res.headers.get("set-cookie");
   return raw ? [raw] : [];
 }
-
+ 
 function cookieHeaderFrom(setCookieArr) {
   return setCookieArr
     .map((c) => c.split(";")[0].trim())
     .filter(Boolean)
     .join("; ");
 }
-
+ 
 async function getGuestCookieHeader() {
-  const res = await fetch("https://www.facebook.com/", { headers: COMMON_HEADERS });
-  // Drain the body so the connection can be reused; we only need the cookies.
-  await res.text();
-  return cookieHeaderFrom(extractSetCookies(res));
+  const res = await fetchWithRetry("https://www.facebook.com/", { headers: COMMON_HEADERS }, 2);
+  const cookies = cookieHeaderFrom(extractSetCookies(res));
+  // Drain the body; we only needed the Set-Cookie headers.
+  await res.text().catch(() => {});
+  return cookies;
 }
-
+ 
 // --- building the search request -------------------------------------------
-
+ 
 function buildSearchUrl(query, country) {
   const params = new URLSearchParams({
     active_status: "active",
@@ -70,13 +98,13 @@ function buildSearchUrl(query, country) {
   });
   return `https://www.facebook.com/ads/library/?${params.toString()}`;
 }
-
+ 
 // --- classifying: roadshow / in-person event vs. plain lead-gen ------------
 // Keyword/phrase patterns that signal an ad is promoting a physical event —
 // a roadshow, a property expo, a "we're coming to your city" push — rather
 // than a standard always-on lead-gen ad. First match wins; order roughly
 // most-specific to least-specific so the label shown is the most useful one.
-
+ 
 const EVENT_PATTERNS = [
   { label: "roadshow", re: /road[\s-]?show/i },
   { label: "property expo", re: /(property|real\s+estate)\s+expo/i },
@@ -94,7 +122,7 @@ const EVENT_PATTERNS = [
   { label: "pop-up event", re: /pop-?up\s+(event|exhibition)/i },
   { label: "seminar", re: /\bseminar\b/i },
 ];
-
+ 
 function classifyAd(ad) {
   const text = `${ad.title || ""} ${ad.body || ""}`;
   for (const { label, re } of EVENT_PATTERNS) {
@@ -102,22 +130,22 @@ function classifyAd(ad) {
   }
   return { category: "leadgen", eventKeyword: null };
 }
-
+ 
 // --- pulling ads out of the HTML --------------------------------------------
 // Meta server-renders the first batch of results as embedded JSON inside
 // <script type="application/json" ...> blocks (their "BigPipe" pattern). We
 // scan every such block for the one holding the search results connection.
-
+ 
 function extractAdsFromHtml(html) {
   const blocks = [];
   const re = /<script type="application\/json"[^>]*>([\s\S]*?)<\/script>/g;
   let m;
   while ((m = re.exec(html)) !== null) blocks.push(m[1]);
-
+ 
   let totalCount = null;
   const ads = [];
   const seen = new Set();
-
+ 
   for (const block of blocks) {
     let obj;
     try {
@@ -127,21 +155,21 @@ function extractAdsFromHtml(html) {
     }
     const conn = obj?.data?.ad_library_main?.search_results_connection;
     if (!conn) continue;
-
+ 
     if (typeof conn.count === "number") totalCount = conn.count;
-
+ 
     for (const edge of conn.edges || []) {
       const collated = edge?.node?.collated_results;
       if (!Array.isArray(collated)) continue;
-
+ 
       for (const item of collated) {
         if (!item?.ad_archive_id || seen.has(item.ad_archive_id)) continue;
         seen.add(item.ad_archive_id);
-
+ 
         const snap = item.snapshot || {};
         const video = Array.isArray(snap.videos) && snap.videos[0] ? snap.videos[0] : null;
         const image = Array.isArray(snap.images) && snap.images[0] ? snap.images[0] : null;
-
+ 
         const ad = {
           id: item.ad_archive_id,
           pageName: snap.page_name || item.page_name || "Unknown",
@@ -162,42 +190,48 @@ function extractAdsFromHtml(html) {
         const { category, eventKeyword } = classifyAd(ad);
         ad.category = category; // "event" | "leadgen"
         ad.eventKeyword = eventKeyword; // which phrase triggered "event", if any
-
+ 
         ads.push(ad);
       }
     }
   }
-
+ 
   return { totalCount, ads };
 }
-
+ 
 // --- handler -----------------------------------------------------------------
-
+ 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: CORS, body: "" };
-
+ 
   try {
     const query = (event.queryStringParameters?.q || "").trim();
     const country = (event.queryStringParameters?.country || "AE").trim().toUpperCase();
-
+ 
     if (!query) return json(400, { error: "Missing competitor name (?q=...)." });
     if (!/^[A-Z]{2}$/.test(country)) return json(400, { error: "Country must be a 2-letter code, e.g. AE, US, GB." });
-
+ 
     const cookieHeader = await getGuestCookieHeader();
     const url = buildSearchUrl(query, country);
-
-    const res = await fetch(url, { headers: { ...COMMON_HEADERS, Cookie: cookieHeader } });
+ 
+    const res = await fetchWithRetry(
+      url,
+      { headers: { ...COMMON_HEADERS, Cookie: cookieHeader, Referer: "https://www.facebook.com/" } },
+      3
+    );
     const html = await res.text();
-
+ 
     if (html.includes('"xfb_ad_library_is_captcha_required":true')) {
       return json(503, { error: "Meta is asking for a CAPTCHA on this request right now. Wait a minute and try again." });
     }
     if (res.status !== 200) {
-      return json(502, { error: `Meta returned HTTP ${res.status}. It may be rate-limiting this server — try again shortly.` });
+      return json(502, {
+        error: `Meta returned HTTP ${res.status} after retrying. This can be a temporary throttle (wait a minute and try again) — or Meta may be more broadly blocking requests from this server's network. See the README's "Important" section for what that means.`,
+      });
     }
-
+ 
     const { totalCount, ads } = extractAdsFromHtml(html);
-
+ 
     if (ads.length === 0) {
       return json(200, {
         query,
@@ -208,7 +242,7 @@ exports.handler = async (event) => {
           "No ads could be parsed. Either there really are no active ads for this search, or Meta changed the page's internal format and the parser needs updating.",
       });
     }
-
+ 
     return json(200, { query, country, totalCount, ads: ads.slice(0, 40) });
   } catch (err) {
     return json(500, { error: "Fetch failed: " + (err?.message || String(err)) });
