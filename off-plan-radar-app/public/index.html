@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Off-Plan Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme: light;
+    --page:      #f9f9f7;
+    --surface:   #fcfcfb;
+    --surface-2: #f1f0eb;
+    --ink:       #0b0b0b;
+    --ink-2:     #52514e;
+    --ink-muted: #898781;
+    --grid:      #e1e0d9;
+    --border:    rgba(11,11,11,0.10);
+    --track:     #eceae2;
+    --brand:     #184f95;
+    --good:      #0ca30c;
+    --warn:      #b3760c;
+    --bad:       #c23b3b;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --page:      #0d0d0d;
+      --surface:   #1a1a19;
+      --surface-2: #212120;
+      --ink:       #ffffff;
+      --ink-2:     #c3c2b7;
+      --ink-muted: #898781;
+      --grid:      #2c2c2a;
+      --border:    rgba(255,255,255,0.10);
+      --track:     #26261f;
+      --brand:     #6fa4e8;
+      --good:      #35c235;
+      --warn:      #e0a940;
+      --bad:       #e66767;
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --page:      #0d0d0d;
+    --surface:   #1a1a19;
+    --surface-2: #212120;
+    --ink:       #ffffff;
+    --ink-2:     #c3c2b7;
+    --ink-muted: #898781;
+    --grid:      #2c2c2a;
+    --border:    rgba(255,255,255,0.10);
+    --track:     #26261f;
+    --brand:     #6fa4e8;
+    --good:      #35c235;
+    --warn:      #e0a940;
+    --bad:       #e66767;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--page); color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{ font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; }
+  .wrap{ max-width:980px; margin:0 auto; padding:40px 20px 80px; }
+
+  header.top{ margin-bottom:28px; }
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.09em;
+    text-transform:uppercase; color:var(--brand); font-weight:600; margin:0 0 8px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .eyebrow .dot{ width:7px; height:7px; border-radius:50%; background:var(--good);
+    box-shadow:0 0 0 3px color-mix(in srgb, var(--good) 20%, transparent); }
+  h1{ font-size:30px; margin:0 0 8px; letter-spacing:-0.01em; }
+  .sub{ color:var(--ink-2); font-size:15px; max-width:56ch; line-height:1.5; margin:0; }
+
+  .panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:20px; margin-bottom:22px;
+  }
+  .field-label{
+    font-family:"IBM Plex Mono",monospace; font-size:11.5px; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--ink-muted); margin-bottom:9px; display:block;
+  }
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+  .chip{
+    border:1px solid var(--border); background:var(--surface-2); color:var(--ink-2);
+    padding:7px 13px; border-radius:20px; font-size:13px; cursor:pointer;
+    transition:background .12s, color .12s, border-color .12s;
+  }
+  .chip:hover{ border-color:var(--brand); color:var(--ink); }
+  .chip.active{ background:var(--brand); border-color:var(--brand); color:#fff; font-weight:500; }
+
+  .controls-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  input[type=text], select{
+    background:var(--page); border:1px solid var(--border); color:var(--ink);
+    border-radius:8px; padding:10px 12px; font-size:14px; font-family:inherit;
+  }
+  input[type=text]{ flex:1 1 240px; min-width:200px; }
+  select{ flex:0 0 auto; }
+  button.primary{
+    background:var(--brand); color:#fff; border:none; border-radius:8px;
+    padding:10px 18px; font-size:14px; font-weight:600; cursor:pointer;
+    font-family:inherit;
+  }
+  button.primary:disabled{ opacity:.55; cursor:default; }
+  button.ghost{
+    background:transparent; border:1px solid var(--border); color:var(--ink-2);
+    border-radius:8px; padding:9px 16px; font-size:13.5px; cursor:pointer; font-family:inherit;
+  }
+  button.ghost:hover{ border-color:var(--brand); color:var(--ink); }
+  button.ghost:disabled{ opacity:.5; cursor:default; }
+
+  .status{ font-size:13px; color:var(--ink-muted); margin-top:12px; display:none; align-items:center; gap:8px; }
+  .status.show{ display:flex; }
+  .spinner{
+    width:14px; height:14px; border-radius:50%; border:2px solid var(--border);
+    border-top-color:var(--brand); animation:spin .7s linear infinite; flex:none;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .banner{
+    border-radius:10px; padding:13px 16px; font-size:13.5px; line-height:1.5;
+    margin-bottom:20px; display:none; border:1px solid;
+  }
+  .banner.show{ display:block; }
+  .banner.error{ background:color-mix(in srgb, var(--bad) 10%, var(--surface)); border-color:color-mix(in srgb, var(--bad) 40%, var(--border)); color:var(--ink); }
+  .banner.warn{ background:color-mix(in srgb, var(--warn) 10%, var(--surface)); border-color:color-mix(in srgb, var(--warn) 40%, var(--border)); color:var(--ink); }
+
+  .kpis{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border);
+    border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:20px;
+    display:none;
+  }
+  .kpis.show{ display:grid; }
+  .kpi{ background:var(--surface); padding:16px 18px; }
+  .kpi .val{ font-size:22px; font-weight:600; }
+  .kpi .lbl{ font-size:12px; color:var(--ink-muted); margin-top:3px; }
+
+  .divider{ display:none; align-items:center; gap:14px; margin-bottom:22px; }
+  .divider.show{ display:flex; }
+  .divider .divider-label{
+    font-family:"IBM Plex Mono",monospace; font-size:11.5px; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--ink-muted); white-space:nowrap;
+  }
+  .divider .line{ height:1px; background:var(--grid); flex:1; }
+  .segmented{
+    display:flex; gap:4px; background:var(--surface-2); border:1px solid var(--border);
+    border-radius:9px; padding:3px; flex:none;
+  }
+  .segmented button{
+    border:none; background:transparent; color:var(--ink-2); font-family:inherit;
+    font-size:12.5px; padding:7px 12px; border-radius:6px; cursor:pointer;
+    display:flex; align-items:center; gap:6px; white-space:nowrap;
+  }
+  .segmented button .n{ font-family:"IBM Plex Mono",monospace; color:var(--ink-muted); }
+  .segmented button:hover{ color:var(--ink); }
+  .segmented button.active{ background:var(--surface); color:var(--ink); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.06); }
+  .segmented button.active .n{ color:var(--ink-2); }
+  .segmented button .swatch{ width:7px; height:7px; border-radius:50%; }
+  .segmented button[data-filter="leadgen"] .swatch{ background:var(--brand); }
+  .segmented button[data-filter="event"] .swatch{ background:var(--warn); }
+
+  section{ margin-bottom:36px; }
+  h2{
+    font-size:12.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-muted);
+    font-weight:600; margin:0 0 14px; font-family:"IBM Plex Mono",monospace;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+
+  #analysis-section{ display:none; }
+  #analysis-section.show{ display:block; }
+  .analysis-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:22px 24px;
+  }
+  .analysis-card p{ font-size:14.5px; line-height:1.7; color:var(--ink-2); margin:0 0 14px; }
+  .analysis-card p:last-child{ margin-bottom:0; }
+  .analysis-card strong{ color:var(--ink); }
+  .analysis-card ul{ margin:0 0 14px; padding-left:20px; color:var(--ink-2); font-size:14.5px; line-height:1.65; }
+  .analysis-empty{ color:var(--ink-muted); font-size:13.5px; }
+
+  #cards-section{ display:none; }
+  #cards-section.show{ display:block; }
+  .cards{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+  @media (max-width:720px){ .cards{ grid-template-columns:1fr; } .kpis{ grid-template-columns:1fr; } }
+
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
+  .card-thumb{ width:100%; aspect-ratio:16/10; background:var(--track); object-fit:cover; display:block; }
+  .card-thumb.placeholder{ display:flex; align-items:center; justify-content:center; color:var(--ink-muted); font-size:12px; font-family:"IBM Plex Mono",monospace; }
+  .card-body{ padding:15px 16px 16px; flex:1; display:flex; flex-direction:column; gap:9px; }
+  .card-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .card-top .name{ font-weight:600; font-size:14.5px; }
+  .badges{ display:flex; gap:6px; flex:none; }
+  .badge{ font-size:10.5px; font-family:"IBM Plex Mono",monospace; padding:3px 7px; border-radius:5px; white-space:nowrap; }
+  .badge.active{ background:color-mix(in srgb, var(--good) 16%, transparent); color:var(--good); }
+  .badge.inactive{ background:var(--surface-2); color:var(--ink-muted); }
+  .badge.cat-leadgen{ background:color-mix(in srgb, var(--brand) 14%, transparent); color:var(--brand); }
+  .badge.cat-event{ background:color-mix(in srgb, var(--warn) 16%, transparent); color:var(--warn); }
+  .card-text{ font-size:13px; line-height:1.5; color:var(--ink-2); max-height:5.6em; overflow:hidden; position:relative; }
+  .card-meta{ display:flex; flex-wrap:wrap; gap:8px; font-size:11.5px; color:var(--ink-muted); font-family:"IBM Plex Mono",monospace; margin-top:auto; padding-top:4px; border-top:1px solid var(--grid); }
+  .card-meta span{ display:inline-flex; align-items:center; }
+  .empty-state{
+    grid-column:1/-1; text-align:center; padding:40px 20px; color:var(--ink-muted);
+    font-size:13.5px; border:1px dashed var(--border); border-radius:12px;
+  }
+
+  footer{ border-top:1px solid var(--border); padding-top:18px; margin-top:8px; font-size:12px; color:var(--ink-muted); line-height:1.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <p class="eyebrow"><span class="dot"></span>Live &middot; Meta Ads Library</p>
+    <h1>Off-Plan Radar</h1>
+    <p class="sub">Pick a competitor, pull their live ads straight from Meta's public Ad Library, and get an instant read on what they're running.</p>
+  </header>
+
+  <div class="panel">
+    <span class="field-label">Competitor</span>
+    <div class="chips" id="chips"></div>
+    <span class="field-label">Or search any advertiser</span>
+    <div class="controls-row">
+      <input type="text" id="query-input" placeholder="e.g. Sobha Realty, Nike, your own agency name..." />
+      <select id="country-select">
+        <option value="AE" selected>United Arab Emirates</option>
+        <option value="SA">Saudi Arabia</option>
+        <option value="US">United States</option>
+        <option value="GB">United Kingdom</option>
+        <option value="IN">India</option>
+        <option value="EG">Egypt</option>
+        <option value="QA">Qatar</option>
+        <option value="KW">Kuwait</option>
+      </select>
+      <button class="primary" id="run-btn">Fetch ads</button>
+    </div>
+    <div class="status" id="status"><span class="spinner"></span><span id="status-text">Fetching…</span></div>
+  </div>
+
+  <div class="banner error" id="error-banner"></div>
+  <div class="banner warn" id="warn-banner"></div>
+
+  <div class="kpis" id="kpis">
+    <div class="kpi"><div class="val mono" id="kpi-total">–</div><div class="lbl">Ad Library results</div></div>
+    <div class="kpi"><div class="val mono" id="kpi-shown">–</div><div class="lbl">ads pulled just now</div></div>
+    <div class="kpi"><div class="val mono" id="kpi-video">–</div><div class="lbl">video creative</div></div>
+  </div>
+
+  <div class="divider" id="filter-divider">
+    <span class="divider-label">Show</span>
+    <span class="line"></span>
+    <div class="segmented" id="segmented">
+      <button data-filter="all" class="active">All <span class="n" id="count-all">0</span></button>
+      <button data-filter="leadgen"><span class="swatch"></span>Lead gen <span class="n" id="count-leadgen">0</span></button>
+      <button data-filter="event"><span class="swatch"></span>Roadshows &amp; events <span class="n" id="count-event">0</span></button>
+    </div>
+  </div>
+
+  <section id="analysis-section">
+    <h2>Analysis <button class="ghost" id="analyze-btn">Generate analysis</button></h2>
+    <div class="analysis-card" id="analysis-card">
+      <p class="analysis-empty">Fetch some ads, then click "Generate analysis" for an AI read on messaging, pricing signals and tactics.</p>
+    </div>
+  </section>
+
+  <section id="cards-section">
+    <h2><span id="cards-heading">Ads pulled just now</span></h2>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <footer>
+    This reads Meta's <em>public</em> Ad Library page server-side — no login, no official API (Meta's Ad Library API doesn't cover commercial ads outside the EU/UK). That also means it's inherently best-effort: Meta can change their page format or rate-limit this at any time, which would need a small update to <span class="mono">netlify/functions/fetch-ads.js</span>. Built for personal competitive research — not intended to be run at scale or resold. See README.md for setup and details.
+  </footer>
+
+</div>
+
+<script>
+  const PRESETS = ["Emaar Properties","DAMAC Properties","Nakheel","Sobha Realty","Binghatti","Ellington Properties","Meraas","Azizi Developments"];
+
+  const chipsEl = document.getElementById('chips');
+  const queryInput = document.getElementById('query-input');
+  const countrySelect = document.getElementById('country-select');
+  const runBtn = document.getElementById('run-btn');
+  const statusEl = document.getElementById('status');
+  const statusText = document.getElementById('status-text');
+  const errorBanner = document.getElementById('error-banner');
+  const warnBanner = document.getElementById('warn-banner');
+  const kpis = document.getElementById('kpis');
+  const filterDivider = document.getElementById('filter-divider');
+  const segmented = document.getElementById('segmented');
+  const cardsSection = document.getElementById('cards-section');
+  const cardsEl = document.getElementById('cards');
+  const cardsHeading = document.getElementById('cards-heading');
+  const analysisSection = document.getElementById('analysis-section');
+  const analysisCard = document.getElementById('analysis-card');
+  const analyzeBtn = document.getElementById('analyze-btn');
+
+  const FILTER_LABELS = { all: 'Ads pulled just now', leadgen: 'Lead-gen ads', event: 'Roadshow & event ads' };
+
+  let lastResult = null;
+  let currentFilter = 'all';
+
+  function escapeHtml(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    }[c]));
+  }
+
+  PRESETS.forEach((name, i) => {
+    const chip = document.createElement('button');
+    chip.className = 'chip' + (i === 4 ? ' active' : '');
+    chip.textContent = name;
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      queryInput.value = '';
+    });
+    chipsEl.appendChild(chip);
+  });
+  queryInput.addEventListener('input', () => {
+    if (queryInput.value.trim()) document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  });
+
+  function activeQuery(){
+    const typed = queryInput.value.trim();
+    if (typed) return typed;
+    const chip = document.querySelector('.chip.active');
+    return chip ? chip.textContent : PRESETS[4];
+  }
+
+  function setStatus(msg){
+    if (!msg){ statusEl.classList.remove('show'); return; }
+    statusText.textContent = msg;
+    statusEl.classList.add('show');
+  }
+  function showError(msg){
+    if (!msg){ errorBanner.classList.remove('show'); return; }
+    errorBanner.textContent = msg;
+    errorBanner.classList.add('show');
+  }
+  function showWarn(msg){
+    if (!msg){ warnBanner.classList.remove('show'); return; }
+    warnBanner.textContent = msg;
+    warnBanner.classList.add('show');
+  }
+
+  function fmtDate(ms){
+    if (!ms) return '?';
+    const d = new Date(ms);
+    return d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+  }
+
+  function renderCards(filter){
+    currentFilter = filter;
+    document.querySelectorAll('#segmented button').forEach(b => b.classList.toggle('active', b.dataset.filter === filter));
+    cardsHeading.textContent = FILTER_LABELS[filter];
+
+    const ads = !lastResult ? [] : lastResult.ads.filter(a => filter === 'all' ? true : a.category === filter);
+
+    cardsEl.innerHTML = '';
+    if (ads.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = filter === 'event'
+        ? 'No roadshow or event-style ads in this batch — nothing mentioning an expo, roadshow, or "meet us" event.'
+        : filter === 'leadgen'
+        ? 'Every ad in this batch mentions an event — none are pure lead-gen.'
+        : 'No ads to show.';
+      cardsEl.appendChild(empty);
+      return;
+    }
+
+    ads.forEach(ad => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      const thumb = ad.thumbnail
+        ? `<img class="card-thumb" src="${escapeHtml(ad.thumbnail)}" loading="lazy" alt="">`
+        : `<div class="card-thumb placeholder">no preview</div>`;
+      const catBadge = ad.category === 'event'
+        ? `<span class="badge cat-event" title="Matched keyword: ${escapeHtml(ad.eventKeyword || '')}">Event · ${escapeHtml(ad.eventKeyword || '')}</span>`
+        : `<span class="badge cat-leadgen">Lead gen</span>`;
+      card.innerHTML = `
+        ${thumb}
+        <div class="card-body">
+          <div class="card-top">
+            <span class="name">${escapeHtml(ad.pageName)}</span>
+            <div class="badges">
+              ${catBadge}
+              <span class="badge ${ad.isActive ? 'active' : 'inactive'}">${ad.isActive ? 'Active' : 'Inactive'}</span>
+            </div>
+          </div>
+          <div class="card-text">${escapeHtml(ad.body || ad.title || '(no text — media-only ad)')}</div>
+          <div class="card-meta">
+            <span>${ad.isVideo ? 'Video' : 'Image'}</span>
+            <span>${escapeHtml((ad.platforms||[]).join(', ') || '—')}</span>
+            <span>started ${fmtDate(ad.startDate)}</span>
+            ${ad.variantCount > 1 ? `<span>${ad.variantCount} variants</span>` : ''}
+          </div>
+        </div>
+      `;
+      cardsEl.appendChild(card);
+    });
+  }
+
+  function renderResults(data){
+    kpis.classList.add('show');
+    document.getElementById('kpi-total').textContent = (data.totalCount ?? data.ads.length).toLocaleString();
+    document.getElementById('kpi-shown').textContent = data.ads.length;
+    document.getElementById('kpi-video').textContent = data.ads.filter(a => a.isVideo).length;
+
+    const leadgenCount = data.ads.filter(a => a.category === 'leadgen').length;
+    const eventCount = data.ads.filter(a => a.category === 'event').length;
+    document.getElementById('count-all').textContent = data.ads.length;
+    document.getElementById('count-leadgen').textContent = leadgenCount;
+    document.getElementById('count-event').textContent = eventCount;
+    filterDivider.classList.add('show');
+
+    cardsSection.classList.add('show');
+    renderCards('all');
+
+    analysisSection.classList.add('show');
+    analysisCard.innerHTML = '<p class="analysis-empty">Click "Generate analysis" above for an AI read on this batch.</p>';
+  }
+
+  segmented.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-filter]');
+    if (!btn) return;
+    renderCards(btn.dataset.filter);
+  });
+
+  async function runFetch(){
+    const q = activeQuery();
+    const country = countrySelect.value;
+    showError(''); showWarn('');
+    runBtn.disabled = true;
+    setStatus(`Fetching live ads for "${q}"…`);
+    try {
+      const res = await fetch(`/.netlify/functions/fetch-ads?q=${encodeURIComponent(q)}&country=${country}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      if (data.warning) showWarn(data.warning);
+      if (!data.ads || data.ads.length === 0) {
+        kpis.classList.remove('show');
+        filterDivider.classList.remove('show');
+        cardsSection.classList.remove('show');
+        analysisSection.classList.remove('show');
+        lastResult = null;
+        return;
+      }
+      lastResult = data;
+      renderResults(data);
+    } catch (err) {
+      showError(err.message || String(err));
+    } finally {
+      setStatus('');
+      runBtn.disabled = false;
+    }
+  }
+
+  function renderAnalysis(text){
+    // tiny markdown-lite: paragraphs, **bold**, "- " lists
+    const escaped = escapeHtml(text);
+    const lines = escaped.split(/\n+/).filter(l => l.trim().length);
+    let html = '';
+    let inList = false;
+    for (const line of lines) {
+      const t = line.trim();
+      if (/^-\s+/.test(t)) {
+        if (!inList) { html += '<ul>'; inList = true; }
+        html += `<li>${t.replace(/^-\s+/, '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}</li>`;
+      } else {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += `<p>${t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}</p>`;
+      }
+    }
+    if (inList) html += '</ul>';
+    analysisCard.innerHTML = html || '<p class="analysis-empty">No analysis text returned.</p>';
+  }
+
+  async function runAnalyze(){
+    if (!lastResult){ showError('Fetch some ads first.'); return; }
+    const scopedAds = lastResult.ads.filter(a => currentFilter === 'all' ? true : a.category === currentFilter);
+    if (scopedAds.length === 0){ showError('No ads in the current filter to analyze — switch to "All" or another tab.'); return; }
+    const scopeSuffix = currentFilter === 'leadgen' ? ' (lead-gen ads only — event/roadshow ads excluded)'
+      : currentFilter === 'event' ? ' (roadshow & event ads only)' : '';
+    analyzeBtn.disabled = true;
+    const prevLabel = analyzeBtn.textContent;
+    analyzeBtn.textContent = 'Analyzing…';
+    analysisCard.innerHTML = '<p class="analysis-empty">Thinking…</p>';
+    showError('');
+    try {
+      const res = await fetch('/.netlify/functions/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: lastResult.query + scopeSuffix, country: lastResult.country, ads: scopedAds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      renderAnalysis(data.analysis || '');
+    } catch (err) {
+      analysisCard.innerHTML = '<p class="analysis-empty">Analysis failed.</p>';
+      showError(err.message || String(err));
+    } finally {
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = prevLabel;
+    }
+  }
+
+  runBtn.addEventListener('click', runFetch);
+  analyzeBtn.addEventListener('click', runAnalyze);
+  queryInput.addEventListener('keydown', e => { if (e.key === 'Enter') runFetch(); });
+</script>
+</body>
+</html>
